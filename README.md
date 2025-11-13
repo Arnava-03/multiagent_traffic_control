@@ -1,255 +1,227 @@
-# Multiagent Traffic Control System
+# Multiagent Traffic Control System - Setup & Execution Guide
 
-An autonomous multiagent system using LangGraph and Ollama for intelligent traffic flow coordination in educational environments.
+## Prerequisites
 
-## Overview
+-   Python 3.8+ installed
+-   PowerShell (Windows) or Terminal (Mac/Linux)
+-   Ollama installed on your system
 
-This system demonstrates sophisticated autonomous agent reasoning for coordinating classroom dismissals to minimize hallway congestion. The agents use LLM-based decision making to negotiate optimal schedules.
+## Initial Setup
 
-## Quick Start
+### 1. Virtual Environment Setup
 
-1. **Activate Environment**:
-   ```powershell
-   .\agentenv\Scripts\Activate.ps1
-   ```
-
-2. **Ensure Ollama is Running**:
-   ```powershell
-   ollama serve
-   ollama pull llama3.2:latest
-   ```
-
-3. **Run Basic Demo**:
-   ```powershell
-   python simple_langgraph_coordination.py
-   ```
-
-4. **Run Quick Test**:
-   ```powershell
-   python simple_langgraph_coordination.py quick_test
-   ```
-
-## Configuration System
-
-The system uses a centralized `config.py` file for all parameters, making it easy to test different scenarios and adjust behavior.
-
-### Key Configuration Sections
-
-#### 1. LLM Configuration (`LLM_CONFIG`)
-- **model**: Ollama model to use (default: "llama3.2:latest")
-- **temperature**: Response randomness (0.0-1.0)
-- **timeout**: Request timeout in seconds
-
-#### 2. Negotiation Parameters (`NEGOTIATION_CONFIG`)
-- **max_rounds**: Maximum negotiation rounds
-- **risk_threshold**: Minimum risk level to trigger coordination
-- **coordination_window**: Time window for schedule adjustments (minutes)
-
-#### 3. Risk Thresholds (`RISK_THRESHOLDS`)
-Critical levels for different risk categories:
-- **low_risk**: Below 0.7
-- **medium_risk**: 0.7-1.2  
-- **high_risk**: Above 1.2
-
-#### 4. Scenarios (`SCENARIOS`)
-Pre-configured test scenarios:
-- **demo**: Simple 3-classroom scenario
-- **stress**: High-congestion 5-classroom scenario
-- **balanced**: Moderate 4-classroom scenario
-- **extreme**: Maximum 6-classroom scenario
-
-#### 5. Agent Prompts (`AGENT_PROMPTS`)
-Customizable prompts for different agent roles and negotiation phases.
-
-## Testing Different Configurations
-
-### Method 1: Command Line Arguments
 ```powershell
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment (Windows PowerShell)
+.\venv\Scripts\Activate.ps1
+
+# Activate virtual environment (Mac/Linux)
+source venv/bin/activate
+```
+
+### 2. Install Dependencies
+
+```powershell
+# Install all required libraries
+pip install -r requirements.txt
+
+# If requirements.txt fails, install manually:
+pip install langgraph==0.2.34
+pip install langchain-ollama==0.2.0
+pip install langchain-core==0.3.15
+pip install langchain-community==0.3.5
+pip install pydantic==2.9.2
+pip install asyncio-mqtt==0.16.2
+pip install python-dotenv==1.0.1
+pip install typing-extensions==4.12.2
+```
+
+### 3. Ollama Setup
+
+```powershell
+# Start Ollama server (keep this terminal open)
+ollama serve
+
+# In a new terminal, pull the required model
+ollama pull llama3.1:8b
+
+# Verify model is available
+ollama list
+```
+
+## Execution Commands
+
+### Main Coordination System
+
+#### Single Episode Runs
+
+```powershell
+# Default scenarios (demo, stress, balanced)
+python simple_langgraph_coordination.py
+
 # Quick test configuration
 python simple_langgraph_coordination.py quick_test
 
-# Default configuration  
-python simple_langgraph_coordination.py
+# Full test configuration
+python simple_langgraph_coordination.py full_test
+
+# Stress test configuration
+python simple_langgraph_coordination.py stress_test
+
+# Assignment demo scenario
+python simple_langgraph_coordination.py assignment_demo
 ```
 
-### Method 2: Test Runner Script
+### Test Runner Scripts
+
+#### Basic Test Modes
+
 ```powershell
-# Quick demo
+# Quick test with demo scenario
 python test_runner.py quick
 
 # Stress test with challenging scenarios
 python test_runner.py stress
 
-# Parameter sensitivity analysis
-python test_runner.py sensitivity
-
 # Ablation study comparing configurations
 python test_runner.py ablation
 
-# Demonstrate all scenarios
+# Parameter sensitivity analysis
+python test_runner.py sensitivity
+
+# Demonstrate all available scenarios
 python test_runner.py scenarios
 
-# Run all tests
+# Run all tests sequentially
 python test_runner.py all
 ```
 
-### Method 3: Modify config.py Directly
-Edit `config.py` to adjust any parameters:
+#### Multi-Episode Simulation
 
-```python
-# Example: Make agents more flexible
-NEGOTIATION_CONFIG = {
-    "max_rounds": 5,  # Increased from 3
-    "risk_threshold": 0.5,  # Lowered from 0.8
-    "coordination_window": 15  # Increased from 10
-}
-
-# Example: Create custom scenario
-SCENARIOS["custom"] = {
-    "description": "My custom test scenario",
-    "bottleneck_capacity": 120,
-    "classrooms": [
-        {
-            "id": "ROOM101",
-            "students": 30,
-            "professor_name": "Dr. Smith",
-            "subject": "Math",
-            "professor_flexibility": 0.7,
-            "scheduled_dismissal": "14:45"
-        }
-        # Add more classrooms...
-    ]
-}
-```
-
-## Understanding Output
-
-The system provides detailed output including:
-
-### Coordination Metrics
-- **Initial Risk**: Congestion level before coordination
-- **Final Risk**: Congestion level after coordination  
-- **Risk Reduction**: Improvement achieved
-- **Coordination Success**: Whether meaningful improvement was achieved
-- **Agents Participated**: Number of agents involved in negotiations
-
-### Example Output
-```
-🎯 COORDINATION EPISODE: demo
-📊 Initial Risk Assessment: 1.57
-
-🤝 AGENT NEGOTIATION:
-Agent ROOM301 proposes: 14:35 (10 min earlier)
-Agent ROOM302 proposes: 14:50 (5 min later)  
-Agent ROOM303 proposes: 14:55 (10 min later)
-
-✅ COORDINATION SUCCESS!
-📈 Performance Metrics:
-  Risk Reduction: 0.54 (1.57 → 1.03)
-  Agents Participated: 3
-  Coordination Success: True
-```
-
-## Configuration Parameters Reference
-
-### Experimentation Parameters
-
-| Parameter | Purpose | Default | Range |
-|-----------|---------|---------|-------|
-| `professor_flexibility` | How willing professors are to change schedules | 0.6 | 0.0-1.0 |
-| `max_schedule_change` | Maximum minutes a class can be moved | 15 | 5-30 |
-| `risk_threshold` | Minimum risk to trigger coordination | 0.8 | 0.3-1.5 |
-| `coordination_window` | Time window for adjustments | 10 | 5-20 |
-| `temperature` | LLM response randomness | 0.1 | 0.0-1.0 |
-
-### Test Configurations
-
-The system includes pre-configured test settings:
-
-- **quick_test**: Minimal scenario for rapid testing
-- **ablation_study**: Compare different parameter combinations
-- **stress_test**: High-load scenarios
-- **sensitivity_analysis**: Parameter sensitivity testing
-
-## Advanced Usage
-
-### Creating Custom Scenarios
-
-1. **Define in config.py**:
-```python
-SCENARIOS["my_scenario"] = {
-    "description": "Custom scenario description",
-    "bottleneck_capacity": 100,  # students/minute
-    "classrooms": [
-        # Classroom definitions...
-    ]
-}
-```
-
-2. **Run the scenario**:
 ```powershell
-# Modify simple_langgraph_coordination.py to use your scenario
-python simple_langgraph_coordination.py
+# Run 4-week commitment tracking simulation
+python test_runner.py episodes
 ```
 
-### Debugging and Analysis
+## Configuration Options
 
-Enable detailed logging by modifying the main script:
-```python
-# Add at the top of simple_langgraph_coordination.py
-import logging
-logging.basicConfig(level=logging.INFO)
+### Available Test Configurations
+
+-   `quick_test` - Minimal scenario for rapid testing
+-   `full_test` - Comprehensive test with multiple scenarios
+-   `stress_test` - High-load scenarios with extreme congestion
+-   `assignment_demo` - Custom scenario for assignment demonstration
+
+### Available Scenarios
+
+-   `demo` - 3 classrooms, basic demonstration
+-   `stress` - 4 large classrooms, high congestion
+-   `balanced` - 4 classrooms, well-distributed load
+-   `extreme` - 3 lecture halls, maximum stress test
+-   `assignment_demo` - 5 classrooms, Monday 11:00 slot
+
+## Expected Output
+
+### Single Episode Output
+
+```
+🚀 Traffic Coordination System
+Configuration: default
+LLM Model: llama3.1:8b
+Risk Threshold: 0.7
+
+=== Running DEMO Scenario ===
+📊 RESULTS:
+Coordination Success: ✅/❌
+Risk Reduction: X.XX (Performance Level)
+Final Risk: X.XX
+Agents Participated: X
+
+📅 Final Schedule:
+  C101 (Mathematics): 12:30 -> 12:28 (-2min)
+  ...
+
+🧠 Autonomous Agent Decisions:
+  ✅ C101: accept (-2min)
+  ...
 ```
 
-### Performance Tuning
+### Multi-Episode Output
 
-For better performance:
-- Reduce `max_rounds` for faster negotiations
-- Increase `risk_threshold` to coordinate less frequently
-- Adjust `temperature` for more/less deterministic behavior
+```
+🗓️ Running Multi-Episode Commitment Test
+Scenario: assignment_demo
+Episodes: 4, Interval: 7 days
 
-## System Architecture
+=== EPISODE 1 — Date: 2025-09-28 ===
+Risk: 3.65 -> 2.04 (Δ1.62) | Success: ❌
+Offers accepted this episode: 2
+  • Slot 11:00: C501 -2min (from C502), reciprocal next: +2min
+Due commitments processed: 0
 
-- **simple_langgraph_coordination.py**: Main coordination system
-- **config.py**: Centralized configuration
-- **tools.py**: Agent capabilities and tools
-- **test_runner.py**: Automated testing framework
-- **requirements_clean.txt**: Dependencies
+=== EPISODE 2 — Date: 2025-10-05 ===
+...
+Due commitments processed: 2
+  • C502 +2min — fulfilled
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Ollama not responding**:
-   ```powershell
-   ollama serve
-   ollama pull llama3.2:latest
-   ```
+1. **Import Errors**
 
-2. **Import errors**:
-   ```powershell
-   pip install -r requirements_clean.txt
-   ```
+    ```powershell
+    # Ensure virtual environment is activated
+    .\venv\Scripts\Activate.ps1
+    # Reinstall dependencies
+    pip install -r requirements.txt
+    ```
 
-3. **Configuration not taking effect**:
-   - Restart Python interpreter
-   - Check for syntax errors in config.py
+2. **Ollama Connection Issues**
 
-### Performance Issues
+    ```powershell
+    # Verify Ollama is running
+    ollama list
+    # Restart Ollama service
+    ollama serve
+    ```
 
-- Reduce `max_rounds` in `NEGOTIATION_CONFIG`
-- Increase `timeout` in `LLM_CONFIG`
-- Use simpler scenarios for testing
+3. **Model Not Found**
 
-## Contributing
+    ```powershell
+    # Pull the required model
+    ollama pull llama3.1:8b
+    ```
 
-To add new features:
+4. **Permission Issues (Windows)**
+    ```powershell
+    # If activation script fails, try:
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+    ```
 
-1. **New agent capabilities**: Add to `tools.py`
-2. **New scenarios**: Add to `SCENARIOS` in `config.py`
-3. **New metrics**: Modify coordination metrics calculation
-4. **New test configurations**: Add to `TEST_CONFIGS` in `config.py`
+## File Structure
 
-## License
+```
+multiagent_traffic_control/
+├── simple_langgraph_coordination.py  # Main coordination system
+├── test_runner.py                    # Test execution framework
+├── config.py                         # Configuration parameters
+├── tools.py                          # Agent tools and utilities
+├── requirements.txt                  # Python dependencies
+├── output.log                        # Execution logs
+└── venv/                             # Virtual environment
+```
 
-This project demonstrates autonomous multiagent coordination for educational purposes.
+## Quick Start Commands
+
+```powershell
+# Complete setup and run
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+ollama serve  # (in separate terminal)
+ollama pull llama3.1:8b
+python test_runner.py episodes
+```

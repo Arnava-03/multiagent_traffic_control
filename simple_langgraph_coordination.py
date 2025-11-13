@@ -1,8 +1,3 @@
-"""
-Simplified LangGraph-based Traffic Coordination System with Ollama
-Autonomous agent reasoning for classroom traffic coordination - Working Version
-"""
-
 import json
 import logging
 from datetime import datetime, timedelta
@@ -20,18 +15,14 @@ from tools import (
 import config
 
 class SimpleTrafficCoordinationSystem:
-    """Simplified LangGraph-based traffic coordination system with Ollama"""
     
     def __init__(self, test_config_name: str = None):
-        # Load configuration from config.py
         self.config = config
         
-        # Apply test configuration if specified
         if test_config_name:
             test_config = config.get_test_config(test_config_name)
             self._apply_test_config(test_config)
         
-        # Initialize LLM with config parameters
         self.llm = ChatOllama(
             model=config.LLM_CONFIG["model"],
             temperature=config.LLM_CONFIG["temperature"],
@@ -39,9 +30,9 @@ class SimpleTrafficCoordinationSystem:
         )
         self.commitment_tracker = CommitmentTracker()
         self.logger = self._setup_logging()
+        self.broadcasts: List[Dict[str, Any]] = []
     
     def _apply_test_config(self, test_config: dict):
-        """Apply test-specific configuration overrides"""
         if "llm_temperature" in test_config:
             config.LLM_CONFIG["temperature"] = test_config["llm_temperature"]
         if "negotiation_timeout" in test_config:
@@ -50,7 +41,6 @@ class SimpleTrafficCoordinationSystem:
             config.LOGGING_CONFIG["detailed_decisions"] = test_config["detailed_logging"]
     
     def _setup_logging(self) -> logging.Logger:
-        """Setup logging configuration"""
         handlers = [
             logging.FileHandler(config.LOGGING_CONFIG["file"])
         ]
@@ -66,13 +56,12 @@ class SimpleTrafficCoordinationSystem:
         return logging.getLogger(__name__)
     
     async def run_coordination_episode(self, scenario_name: str, episode_date: str = None) -> Dict[str, Any]:
-        """Run a complete coordination episode"""
         if episode_date is None:
             episode_date = datetime.now().strftime("%Y-%m-%d")
         
         scenario = config.get_scenario_config(scenario_name)
+        self.broadcasts = []
         
-        # Initialize classroom states
         classroom_states = []
         for classroom_config in scenario["classrooms"]:
             classroom_state = ClassroomState(
@@ -85,25 +74,17 @@ class SimpleTrafficCoordinationSystem:
         
         self.logger.info(f"Starting coordination episode: {scenario_name} on {episode_date}")
         
-        # Phase 1: Bottleneck Analysis
         analysis = await self._bottleneck_analysis_phase(classroom_states, scenario["bottleneck_capacity"])
-        
-        # Phase 2: Autonomous Agent Negotiations  
         negotiation_results = await self._negotiation_phase(classroom_states, analysis, episode_date)
-        
-        # Phase 3: Final Coordination
         final_results = await self._final_coordination_phase(classroom_states, analysis, negotiation_results, episode_date)
         
         return final_results
     
     async def _bottleneck_analysis_phase(self, classroom_states: List[ClassroomState], capacity: int) -> Dict[str, Any]:
-        """Phase 1: Bottleneck agent analyzes traffic and generates recommendations"""
         self.logger.info("Phase 1: Bottleneck Analysis")
         
-        # Analyze current traffic situation using tools
         analysis = BottleneckTools.analyze_traffic_flow(classroom_states, capacity)
         
-        # Use LLM for intelligent analysis and recommendation generation
         bottleneck_prompt = ChatPromptTemplate.from_messages([
             ("system", config.AGENT_PROMPTS["bottleneck_system"]),
             ("human", config.AGENT_PROMPTS["bottleneck_human"])
@@ -120,10 +101,7 @@ class SimpleTrafficCoordinationSystem:
             response = await self.llm.ainvoke(messages)
             llm_recommendations = self._parse_llm_response(response.content)
             self.logger.info(f"Bottleneck Agent: Generated LLM-based recommendations")
-            
-            # Merge with tool-based recommendations
             analysis["llm_recommendations"] = llm_recommendations
-            
         except Exception as e:
             self.logger.error(f"Bottleneck Agent LLM error: {e}")
             analysis["llm_recommendations"] = {"error": str(e)}
@@ -132,26 +110,20 @@ class SimpleTrafficCoordinationSystem:
     
     async def _negotiation_phase(self, classroom_states: List[ClassroomState], 
                                 analysis: Dict[str, Any], episode_date: str) -> List[Dict[str, Any]]:
-        """Phase 2: Classroom agents negotiate autonomously using LLM reasoning"""
         self.logger.info("Phase 2: Autonomous Agent Negotiations")
         
         negotiation_results = []
+        self._apply_due_commitments(classroom_states, episode_date)
+        self._propose_commitments(classroom_states, analysis, episode_date)
         
-        # Identify agents that need to negotiate based on analysis
         agents_needing_negotiation = []
         if analysis["max_congestion_ratio"] > config.NEGOTIATION_CONFIG["risk_threshold"]:
-            # Get the top agents contributing to congestion
-            agents_needing_negotiation = sorted(
-                classroom_states, 
-                key=lambda cs: cs.current_students, 
-                reverse=True
-            )[:config.NEGOTIATION_CONFIG["agents_per_negotiation"]]
+            agents_needing_negotiation = list(classroom_states)
         
         if not agents_needing_negotiation:
             self.logger.info("No negotiations needed - congestion risk is manageable")
             return negotiation_results
         
-        # Each agent makes autonomous decisions
         for classroom_state in agents_needing_negotiation:
             negotiation_result = await self._autonomous_agent_decision(
                 classroom_state, analysis, episode_date
@@ -159,21 +131,117 @@ class SimpleTrafficCoordinationSystem:
             negotiation_results.append(negotiation_result)
         
         return negotiation_results
+
+    def _apply_due_commitments(self, classroom_states: List[ClassroomState], episode_date: str) -> None:
+        id_to_state = {cs.classroom_id: cs for cs in classroom_states}
+        due = self.commitment_tracker.get_commitments_for_episode(episode_date)
+        for c in due:
+            target = id_to_state.get(c.to_classroom)
+            fulfilled = False
+            if target is not None:
+                eval_result = ClassroomTools.evaluate_adjustment_feasibility(target, c.adjustment_minutes)
+                if eval_result.get("is_feasible") and eval_result.get("constraints", {}).get("within_limits", True):
+                    try:
+                        target.current_adjustment = int(target.current_adjustment + c.adjustment_minutes)
+                        fulfilled = True
+                    except Exception:
+                        fulfilled = False
+            flag = self.commitment_tracker.fulfill_commitment(c, fulfilled)
+            self.broadcasts.append({
+                "type": "commitment_due_result",
+                "from": c.from_classroom,
+                "to": c.to_classroom,
+                "episode_date": c.episode_date,
+                "adjustment": c.adjustment_minutes,
+                "status": "fulfilled" if fulfilled else "violated",
+                "flag": flag if flag.get("flagged") else None
+            })
+
+    def _propose_commitments(self, classroom_states: List[ClassroomState], analysis: Dict[str, Any], episode_date: str) -> None:
+        id_to_state = {cs.classroom_id: cs for cs in classroom_states}
+        time_slot_analysis = analysis.get("time_slot_analysis", {})
+        critical_slots: List[str] = analysis.get("critical_time_slots", [])
+        for slot in critical_slots:
+            info = time_slot_analysis.get(slot, {})
+            classrooms = info.get("classrooms", [])
+            if not classrooms:
+                continue
+            capacity = info.get("capacity", analysis.get("capacity_per_minute", 0))
+            slot_students = info.get("students", 0)
+            over = max(0, slot_students - capacity)
+            if over <= 0:
+                continue
+            classrooms_sorted = sorted(classrooms, key=lambda x: x.get("students", 0), reverse=True)
+            moves = 0
+            for i, cand in enumerate(classrooms_sorted):
+                if over <= 0 or moves >= 2:
+                    break
+                cand_id = cand.get("classroom")
+                cand_state = id_to_state.get(cand_id)
+                if cand_state is None:
+                    continue
+                for delta in (-config.NEGOTIATION_CONFIG["default_adjustment_minutes"], config.NEGOTIATION_CONFIG["default_adjustment_minutes"]):
+                    feas = ClassroomTools.evaluate_adjustment_feasibility(cand_state, delta)
+                    if not (feas.get("is_feasible") and feas.get("constraints", {}).get("within_limits", True)):
+                        continue
+                    if classrooms_sorted[0].get("classroom") != cand_id:
+                        from_id = classrooms_sorted[0].get("classroom")
+                    elif len(classrooms_sorted) > 1:
+                        from_id = classrooms_sorted[1].get("classroom")
+                    else:
+                        from_id = cand_id
+                    from_state = id_to_state.get(from_id, cand_state)
+                    offer = ClassroomTools.create_commitment_offer(from_state, cand_id, delta, episode_date)
+                    acceptance = ClassroomTools.evaluate_commitment_offer(cand_state, offer)
+                    if acceptance.get("should_accept"):
+                        cand_state.current_adjustment = int(cand_state.current_adjustment + delta)
+                        self.commitment_tracker.add_commitment(offer)
+                        self.broadcasts.append({
+                            "type": "commitment_offer_accepted",
+                            "time_slot": slot,
+                            "from": from_id,
+                            "to": cand_id,
+                            "adjustment": delta,
+                            "students": cand.get("students", 0),
+                            "reciprocal": offer.reciprocal_commitment
+                        })
+                        try:
+                            reciprocal = offer.reciprocal_commitment or {}
+                            reciprocal_ep = reciprocal.get("episode_date")
+                            reciprocal_adj = reciprocal.get("adjustment_minutes", 0)
+                            reciprocal_type = reciprocal.get("commitment_type", "extend" if reciprocal_adj > 0 else "shorten")
+                            if reciprocal_ep is not None and reciprocal_adj != 0:
+                                future_commitment = ClassroomCommitment(
+                                    from_classroom=cand_id,
+                                    to_classroom=from_id,
+                                    episode_date=reciprocal_ep,
+                                    commitment_type=reciprocal_type,
+                                    adjustment_minutes=reciprocal_adj
+                                )
+                                self.commitment_tracker.add_commitment(future_commitment)
+                                self.broadcasts.append({
+                                    "type": "commitment_reciprocal_recorded",
+                                    "from": future_commitment.from_classroom,
+                                    "to": future_commitment.to_classroom,
+                                    "episode_date": future_commitment.episode_date,
+                                    "adjustment": future_commitment.adjustment_minutes
+                                })
+                        except Exception:
+                            pass
+                        over = max(0, over - cand.get("students", 0))
+                        moves += 1
+                        break
     
     async def _autonomous_agent_decision(self, classroom_state: ClassroomState, 
                                        analysis: Dict[str, Any], episode_date: str) -> Dict[str, Any]:
-        """Individual classroom agent makes autonomous decision using LLM"""
         
-        # Evaluate feasibility using tools
         suggested_adjustment = config.calculate_suggested_adjustment(classroom_state.professor_flexibility)
         feasibility = ClassroomTools.evaluate_adjustment_feasibility(
             classroom_state, suggested_adjustment
         )
         
-        # Get classroom details from scenario
         classroom_details = self._get_classroom_details(classroom_state.classroom_id)
         
-        # Use LLM for autonomous decision making
         classroom_prompt = ChatPromptTemplate.from_messages([
             ("system", config.AGENT_PROMPTS["classroom_system"].format(
                 classroom_id=classroom_state.classroom_id,
@@ -203,10 +271,8 @@ class SimpleTrafficCoordinationSystem:
             
             self.logger.info(f"Classroom {classroom_state.classroom_id}: Autonomous decision - {decision_data.get('decision', 'no_decision')}")
             
-            # Apply the decision
             if decision_data.get("decision") == "accept" or decision_data.get("proposed_adjustment", 0) != 0:
                 adjustment = decision_data.get("proposed_adjustment", suggested_adjustment)
-                # Ensure adjustment is an integer
                 if isinstance(adjustment, dict) or adjustment is None:
                     adjustment = suggested_adjustment
                 classroom_state.current_adjustment = int(adjustment)
@@ -223,7 +289,6 @@ class SimpleTrafficCoordinationSystem:
         except Exception as e:
             self.logger.error(f"Classroom {classroom_state.classroom_id} LLM error: {e}")
             
-            # Fallback to tool-based decision
             if feasibility["is_feasible"]:
                 classroom_state.current_adjustment = int(suggested_adjustment)
                 
@@ -240,10 +305,8 @@ class SimpleTrafficCoordinationSystem:
     async def _final_coordination_phase(self, classroom_states: List[ClassroomState], 
                                       analysis: Dict[str, Any], negotiation_results: List[Dict[str, Any]], 
                                       episode_date: str) -> Dict[str, Any]:
-        """Phase 3: Final coordination and result compilation"""
         self.logger.info("Phase 3: Final Coordination")
         
-        # Calculate final exit times
         final_schedule = {}
         for classroom_state in classroom_states:
             final_time = BottleneckTools.calculate_exit_time(
@@ -257,13 +320,11 @@ class SimpleTrafficCoordinationSystem:
                 "students": classroom_state.current_students
             }
         
-        # Analyze final traffic distribution
         final_analysis = BottleneckTools.analyze_traffic_flow(
             classroom_states,
             analysis["capacity_per_minute"]
         )
         
-        # Calculate coordination effectiveness
         initial_risk = analysis["max_congestion_ratio"]
         final_risk = final_analysis["max_congestion_ratio"]
         risk_reduction = max(0, initial_risk - final_risk)
@@ -271,7 +332,6 @@ class SimpleTrafficCoordinationSystem:
         coordination_success = (final_analysis["overall_status"] in ["normal", "moderate"] and 
                                final_risk <= config.PERFORMANCE_METRICS["max_acceptable_final_risk"])
         
-        # Log results
         self.logger.info("=== COORDINATION RESULTS ===")
         self.logger.info(f"Episode: {episode_date}")
         self.logger.info(f"Initial Risk: {initial_risk:.2f} -> Final Risk: {final_risk:.2f}")
@@ -281,13 +341,13 @@ class SimpleTrafficCoordinationSystem:
         for classroom_id, schedule in final_schedule.items():
             self.logger.info(f"{classroom_id}: {schedule['base_time']} -> {schedule['final_time']} ({schedule['adjustment']:+d}min)")
         
-        # Compile comprehensive results
         results = {
             "episode_date": episode_date,
             "initial_analysis": analysis,
             "final_analysis": final_analysis,
             "negotiation_results": negotiation_results,
             "final_schedule": final_schedule,
+            "broadcasts": self.broadcasts,
             "coordination_metrics": {
                 "initial_risk": initial_risk,
                 "final_risk": final_risk,
@@ -300,7 +360,6 @@ class SimpleTrafficCoordinationSystem:
         return results
     
     def _get_classroom_details(self, classroom_id: str) -> dict:
-        """Get detailed classroom information from scenario config"""
         for scenario in config.SCENARIOS.values():
             for classroom in scenario["classrooms"]:
                 if classroom["id"] == classroom_id:
@@ -308,15 +367,12 @@ class SimpleTrafficCoordinationSystem:
         return {"professor_name": "Unknown", "subject": "Unknown"}
     
     def _parse_llm_response(self, response_content: str) -> Dict[str, Any]:
-        """Parse LLM response, handling both JSON and natural language"""
         try:
-            # Try to extract JSON from response
             import re
             json_match = re.search(r'\{.*\}', response_content, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group())
             else:
-                # Fallback: create structured response from text
                 return {
                     "raw_response": response_content,
                     "decision": "accept" if "accept" in response_content.lower() else "reject",
@@ -330,11 +386,8 @@ class SimpleTrafficCoordinationSystem:
             }
 
 async def main(test_config_name: str = None):
-    """Main execution function"""
-    # Initialize the coordination system with optional test configuration
     system = SimpleTrafficCoordinationSystem(test_config_name)
     
-    # Get scenarios to run based on test config
     if test_config_name:
         test_config = config.get_test_config(test_config_name)
         scenarios = test_config.get("scenarios", ["demo"])
@@ -355,7 +408,6 @@ async def main(test_config_name: str = None):
         
         results = await system.run_coordination_episode(scenario)
         
-        # Performance evaluation
         metrics = results['coordination_metrics']
         risk_reduction = metrics['risk_reduction']
         
@@ -365,14 +417,12 @@ async def main(test_config_name: str = None):
         print(f"Final Risk: {metrics['final_risk']:.2f}")
         print(f"Agents Participated: {metrics['agents_participated']}")
         
-        # Print final schedule
         print(f"\n📅 Final Schedule:")
         for classroom_id, schedule in results['final_schedule'].items():
             details = system._get_classroom_details(classroom_id)
             print(f"  {classroom_id} ({details.get('subject', 'Unknown')}): "
                   f"{schedule['base_time']} -> {schedule['final_time']} ({schedule['adjustment']:+d}min)")
         
-        # Print autonomous decisions if detailed logging is enabled
         if config.LOGGING_CONFIG["detailed_decisions"] and results['negotiation_results']:
             print(f"\n🧠 Autonomous Agent Decisions:")
             for negotiation in results['negotiation_results']:
@@ -383,7 +433,6 @@ async def main(test_config_name: str = None):
                     print(f"     Reasoning: {negotiation['reasoning'][:100]}...")
 
 def _get_performance_level(risk_reduction: float) -> str:
-    """Get performance level description"""
     if risk_reduction >= config.PERFORMANCE_METRICS["excellent_risk_reduction"]:
         return "🌟 Excellent"
     elif risk_reduction >= config.PERFORMANCE_METRICS["good_risk_reduction"]:
@@ -395,9 +444,5 @@ def _get_performance_level(risk_reduction: float) -> str:
 
 if __name__ == "__main__":
     import sys
-    
-    # Allow command line argument for test configuration
     test_config = sys.argv[1] if len(sys.argv) > 1 else None
-    
-    # Run the system
     asyncio.run(main(test_config))

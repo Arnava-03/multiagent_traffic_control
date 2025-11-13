@@ -1,8 +1,3 @@
-"""
-Agent Tools for Traffic Coordination System
-This module defines the tools available to agents for coordination tasks.
-"""
-
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta

@@ -1,69 +1,46 @@
-"""
-Configuration file for Traffic Coordination System
-Centralized parameters for easy testing and experimentation
-"""
-
-# ==========================================
-# LLM CONFIGURATION
-# ==========================================
 LLM_CONFIG = {
-    "model": "llama3.2:latest",
+    "model": "llama3.1:8b",
     "temperature": 0.7,
     "base_url": "http://localhost:11434",
-    "timeout": 120,  # seconds
+    "timeout": 120,
     "max_retries": 3
 }
 
-# ==========================================
-# NEGOTIATION PARAMETERS
-# ==========================================
 NEGOTIATION_CONFIG = {
-    "risk_threshold": 0.7,  # Threshold for triggering negotiations (0.0-2.0+)
+    "risk_threshold": 0.7,
     "max_negotiation_rounds": 3,
-    "agents_per_negotiation": 2,  # Number of top agents selected for negotiation
-    "default_adjustment_minutes": 2,  # Default adjustment amount
-    "max_adjustment_minutes": 8,  # Maximum allowed adjustment
-    "negotiation_timeout": 300  # seconds
+    "agents_per_negotiation": 3,
+    "default_adjustment_minutes": 2,
+    "max_adjustment_minutes": 8,
+    "negotiation_timeout": 300
 }
 
-# ==========================================
-# RISK AND CONGESTION THRESHOLDS
-# ==========================================
 RISK_THRESHOLDS = {
-    "normal": 0.7,      # Below this is normal traffic
-    "moderate": 1.0,    # 0.7-1.0 is moderate congestion
-    "high": 1.5,        # 1.0-1.5 is high congestion
-    "critical": 1.5     # Above this is critical congestion
+    "normal": 0.7,
+    "moderate": 1.0,
+    "high": 1.5,
+    "critical": 1.5
 }
 
-# ==========================================
-# FEASIBILITY CALCULATION PARAMETERS
-# ==========================================
 FEASIBILITY_CONFIG = {
-    "high_flexibility_threshold": 0.3,      # Professor flexibility > 0.3 is high
-    "low_flexibility_threshold": -0.3,      # Professor flexibility < -0.3 is low
-    "base_feasibility_score": 0.6,          # Starting feasibility score
-    "flexibility_bonus": 0.2,               # Bonus for high flexibility
-    "flexibility_penalty": 0.3,             # Penalty for opposing preferences
-    "adjustment_penalty_per_minute": 0.05,  # Penalty per minute of adjustment
-    "constraint_violation_penalty": 0.7     # Penalty for exceeding max adjustment
+    "high_flexibility_threshold": 0.3,
+    "low_flexibility_threshold": -0.3,
+    "base_feasibility_score": 0.6,
+    "flexibility_bonus": 0.2,
+    "flexibility_penalty": 0.3,
+    "adjustment_penalty_per_minute": 0.05,
+    "constraint_violation_penalty": 0.7
 }
 
-# ==========================================
-# REPUTATION AND COMMITMENT PARAMETERS
-# ==========================================
 REPUTATION_CONFIG = {
-    "initial_reputation": 1.0,         # Starting reputation score
-    "fulfillment_bonus": 0.1,          # Bonus for fulfilling commitments
-    "violation_penalty": 0.2,          # Penalty for violating commitments
-    "violation_threshold": 3,          # Number of violations before flagging
-    "min_reputation": 0.0,             # Minimum reputation score
-    "max_reputation": 1.0              # Maximum reputation score
+    "initial_reputation": 1.0,
+    "fulfillment_bonus": 0.1,
+    "violation_penalty": 0.2,
+    "violation_threshold": 3,
+    "min_reputation": 0.0,
+    "max_reputation": 1.0
 }
 
-# ==========================================
-# SIMULATION SCENARIOS
-# ==========================================
 SCENARIOS = {
     "demo": {
         "name": "Demo Scenario",
@@ -207,24 +184,66 @@ SCENARIOS = {
             }
         ],
         "bottleneck_capacity": 80
+    },
+    
+    "assignment_demo": {
+        "name": "Assignment Demo Scenario",
+        "description": "Monday 11:00 slot with 5 classrooms; designed to test staggered exits at a road bottleneck",
+        "classrooms": [
+            {
+                "id": "C501",
+                "students": 120,
+                "professor_flexibility": -0.6,
+                "base_end_time": "11:00",
+                "subject": "Algorithms",
+                "professor_name": "Dr. Rao"
+            },
+            {
+                "id": "C502",
+                "students": 100,
+                "professor_flexibility": 0.2,
+                "base_end_time": "11:00",
+                "subject": "Physics",
+                "professor_name": "Prof. Mehta"
+            },
+            {
+                "id": "C503",
+                "students": 90,
+                "professor_flexibility": 0.5,
+                "base_end_time": "11:00",
+                "subject": "Econometrics",
+                "professor_name": "Dr. Kapoor"
+            },
+            {
+                "id": "C504",
+                "students": 85,
+                "professor_flexibility": -0.2,
+                "base_end_time": "11:00",
+                "subject": "Data Structures",
+                "professor_name": "Prof. Nair"
+            },
+            {
+                "id": "C505",
+                "students": 80,
+                "professor_flexibility": 0.0,
+                "base_end_time": "11:00",
+                "subject": "Sociology",
+                "professor_name": "Dr. Kaur"
+            }
+        ],
+        "bottleneck_capacity": 130
     }
 }
 
-# ==========================================
-# LOGGING CONFIGURATION
-# ==========================================
 LOGGING_CONFIG = {
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     "file": "output.log",
     "console_output": True,
-    "detailed_decisions": True,  # Log detailed agent decision reasoning
-    "performance_metrics": True  # Log performance timing
+    "detailed_decisions": True,
+    "performance_metrics": True
 }
 
-# ==========================================
-# AGENT DECISION PROMPTS
-# ==========================================
 AGENT_PROMPTS = {
     "bottleneck_system": """You are a Traffic Bottleneck Agent responsible for analyzing classroom exit patterns and preventing congestion.
 
@@ -280,23 +299,17 @@ Based on your classroom's constraints and the traffic situation, decide:
 Provide your response as JSON with: decision, proposed_adjustment, reasoning"""
 }
 
-# ==========================================
-# EXPERIMENTAL PARAMETERS
-# ==========================================
 EXPERIMENTAL_CONFIG = {
-    "enable_commitment_tracking": True,   # Enable multi-episode commitments
-    "enable_reputation_system": True,    # Enable reputation-based decisions
-    "enable_llm_reasoning": True,        # Use LLM for decisions vs rule-based
-    "enable_detailed_logging": True,     # Log detailed decision processes
-    "simulation_speed": "normal",        # "fast", "normal", "slow"
-    "random_seed": 42,                   # For reproducible experiments
-    "max_episodes": 10,                  # Maximum episodes in multi-episode runs
-    "episode_interval_days": 7           # Days between episodes
+    "enable_commitment_tracking": True,
+    "enable_reputation_system": True,
+    "enable_llm_reasoning": True,
+    "enable_detailed_logging": True,
+    "simulation_speed": "normal",
+    "random_seed": 42,
+    "max_episodes": 10,
+    "episode_interval_days": 7
 }
 
-# ==========================================
-# TESTING CONFIGURATIONS
-# ==========================================
 TEST_CONFIGS = {
     "quick_test": {
         "scenarios": ["demo"],
@@ -329,34 +342,31 @@ TEST_CONFIGS = {
             {"risk_threshold": 0.5, "name": "low_threshold"},
             {"risk_threshold": 1.0, "name": "high_threshold"}
         ]
+    },
+    "assignment_demo": {
+        "scenarios": ["assignment_demo"],
+        "llm_temperature": 0.5,
+        "negotiation_timeout": 180,
+        "detailed_logging": True
     }
 }
 
-# ==========================================
-# PERFORMANCE THRESHOLDS
-# ==========================================
 PERFORMANCE_METRICS = {
-    "excellent_risk_reduction": 0.5,     # Risk reduction > 0.5 is excellent
-    "good_risk_reduction": 0.3,          # Risk reduction > 0.3 is good
-    "acceptable_risk_reduction": 0.1,    # Risk reduction > 0.1 is acceptable
-    "max_acceptable_final_risk": 1.0,    # Final risk should be <= 1.0
-    "min_agent_participation": 0.5,      # At least 50% of agents should participate
-    "max_negotiation_time": 300          # Max time for negotiations (seconds)
+    "excellent_risk_reduction": 0.5,
+    "good_risk_reduction": 0.3,
+    "acceptable_risk_reduction": 0.1,
+    "max_acceptable_final_risk": 1.0,
+    "min_agent_participation": 0.5,
+    "max_negotiation_time": 300
 }
 
-# ==========================================
-# UTILITY FUNCTIONS
-# ==========================================
 def get_scenario_config(scenario_name: str) -> dict:
-    """Get configuration for a specific scenario"""
     return SCENARIOS.get(scenario_name, SCENARIOS["demo"])
 
 def get_test_config(test_name: str) -> dict:
-    """Get configuration for a specific test"""
     return TEST_CONFIGS.get(test_name, TEST_CONFIGS["quick_test"])
 
 def get_flexibility_description(flexibility: float) -> str:
-    """Convert numerical flexibility to human-readable description"""
     if flexibility <= -0.5:
         return "strongly prefers shorter lectures"
     elif flexibility <= -0.2:
@@ -369,7 +379,6 @@ def get_flexibility_description(flexibility: float) -> str:
         return "flexible with lecture timing"
 
 def calculate_suggested_adjustment(professor_flexibility: float) -> int:
-    """Calculate suggested adjustment based on professor flexibility"""
     if professor_flexibility < -FEASIBILITY_CONFIG["low_flexibility_threshold"]:
         return -NEGOTIATION_CONFIG["default_adjustment_minutes"]
     elif professor_flexibility > FEASIBILITY_CONFIG["high_flexibility_threshold"]:
@@ -377,26 +386,18 @@ def calculate_suggested_adjustment(professor_flexibility: float) -> int:
     else:
         return NEGOTIATION_CONFIG["default_adjustment_minutes"] if professor_flexibility >= 0 else -NEGOTIATION_CONFIG["default_adjustment_minutes"]
 
-# ==========================================
-# VALIDATION FUNCTIONS
-# ==========================================
 def validate_config():
-    """Validate configuration parameters"""
     errors = []
     
-    # Validate risk thresholds
     if not (0 <= RISK_THRESHOLDS["normal"] <= RISK_THRESHOLDS["moderate"] <= RISK_THRESHOLDS["high"]):
         errors.append("Risk thresholds must be in ascending order")
     
-    # Validate feasibility thresholds
     if FEASIBILITY_CONFIG["low_flexibility_threshold"] >= FEASIBILITY_CONFIG["high_flexibility_threshold"]:
         errors.append("Low flexibility threshold must be less than high flexibility threshold")
     
-    # Validate reputation bounds
     if REPUTATION_CONFIG["min_reputation"] >= REPUTATION_CONFIG["max_reputation"]:
         errors.append("Min reputation must be less than max reputation")
     
-    # Validate scenarios
     for scenario_name, scenario in SCENARIOS.items():
         if scenario["bottleneck_capacity"] <= 0:
             errors.append(f"Scenario {scenario_name}: bottleneck capacity must be positive")
@@ -410,7 +411,6 @@ def validate_config():
     
     return True
 
-# Validate configuration on import
 if __name__ == "__main__":
     validate_config()
     print("Configuration validation passed!")

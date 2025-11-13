@@ -1,16 +1,11 @@
-"""
-Test Runner for Traffic Coordination System
-Demonstrates different configuration options and testing scenarios
-"""
-
 import asyncio
 import sys
 import time
 from simple_langgraph_coordination import SimpleTrafficCoordinationSystem
 import config
+from datetime import datetime, timedelta
 
 async def run_quick_test():
-    """Run a quick test with minimal scenarios"""
     print("🚀 Running Quick Test Configuration")
     system = SimpleTrafficCoordinationSystem("quick_test")
     
@@ -23,7 +18,6 @@ async def run_quick_test():
     return results
 
 async def run_stress_test():
-    """Run stress test with challenging scenarios"""
     print("🔥 Running Stress Test Configuration")
     system = SimpleTrafficCoordinationSystem("stress_test")
     
@@ -37,7 +31,6 @@ async def run_stress_test():
         print(f"Success: {'✅' if metrics['coordination_success'] else '❌'}")
 
 async def run_ablation_study():
-    """Run ablation study to compare different configurations"""
     print("🔬 Running Ablation Study")
     
     base_scenario = "balanced"
@@ -47,7 +40,6 @@ async def run_ablation_study():
     for variation in test_variations:
         print(f"\n--- Testing: {variation['name']} ---")
         
-        # Temporarily apply variation settings
         original_values = {}
         for key, value in variation.items():
             if key != "name" and hasattr(config, key.upper() + "_CONFIG"):
@@ -56,7 +48,6 @@ async def run_ablation_study():
                     original_values[key] = config_dict[key.split('_')[-1]]
                     config_dict[key.split('_')[-1]] = value
         
-        # Run test
         system = SimpleTrafficCoordinationSystem()
         results = await system.run_coordination_episode(base_scenario)
         metrics = results['coordination_metrics']
@@ -68,12 +59,10 @@ async def run_ablation_study():
             "final_risk": metrics['final_risk']
         })
         
-        # Restore original values
         for key, value in original_values.items():
             config_dict = getattr(config, key.upper() + "_CONFIG", {})
             config_dict[key.split('_')[-1]] = value
     
-    # Print comparison
     print(f"\n📊 ABLATION STUDY RESULTS:")
     print(f"{'Variation':<15} {'Risk Reduction':<15} {'Final Risk':<12} {'Success'}")
     print("-" * 60)
@@ -82,10 +71,8 @@ async def run_ablation_study():
         print(f"{result['name']:<15} {result['risk_reduction']:<15.2f} {result['final_risk']:<12.2f} {success_icon}")
 
 async def run_parameter_sensitivity():
-    """Test sensitivity to different parameter values"""
     print("📈 Running Parameter Sensitivity Analysis")
     
-    # Test different risk thresholds
     risk_thresholds = [0.5, 0.7, 0.9, 1.1]
     scenario = "demo"
     
@@ -94,7 +81,6 @@ async def run_parameter_sensitivity():
     print("-" * 60)
     
     for threshold in risk_thresholds:
-        # Temporarily change threshold
         original_threshold = config.NEGOTIATION_CONFIG["risk_threshold"]
         config.NEGOTIATION_CONFIG["risk_threshold"] = threshold
         
@@ -105,11 +91,9 @@ async def run_parameter_sensitivity():
         success_icon = "✅" if metrics['coordination_success'] else "❌"
         print(f"{threshold:<12.1f} {metrics['agents_participated']:<15} {metrics['risk_reduction']:<15.2f} {success_icon}")
         
-        # Restore original
         config.NEGOTIATION_CONFIG["risk_threshold"] = original_threshold
 
 async def demonstrate_all_scenarios():
-    """Demonstrate all available scenarios"""
     print("🎭 Demonstrating All Scenarios")
     system = SimpleTrafficCoordinationSystem()
     
@@ -119,14 +103,12 @@ async def demonstrate_all_scenarios():
         print(f"🏫 {len(scenario_config['classrooms'])} classrooms")
         print(f"🚦 {scenario_config['bottleneck_capacity']} capacity/min")
         
-        # Show classroom details
         print("Classrooms:")
         for classroom in scenario_config['classrooms']:
             flexibility_desc = config.get_flexibility_description(classroom['professor_flexibility'])
             print(f"  • {classroom['id']}: {classroom['students']} students, "
                   f"{classroom['professor_name']} ({classroom['subject']}) - {flexibility_desc}")
         
-        # Run scenario
         start_time = time.time()
         results = await system.run_coordination_episode(scenario_name)
         end_time = time.time()
@@ -137,8 +119,47 @@ async def demonstrate_all_scenarios():
         print(f"  Success: {'✅' if metrics['coordination_success'] else '❌'}")
         print(f"  Time: {end_time - start_time:.1f}s")
 
+async def run_multi_episode_commitments():
+    print("🗓️  Running Multi-Episode Commitment Test")
+    scenario = "assignment_demo" if "assignment_demo" in config.SCENARIOS else "demo"
+    episodes = 4
+    interval_days = config.EXPERIMENTAL_CONFIG.get("episode_interval_days", 7)
+    start_date = datetime.now().strftime("%Y-%m-%d")
+
+    print(f"Scenario: {scenario}")
+    print(f"Episodes: {episodes}, Interval: {interval_days} days")
+
+    system = SimpleTrafficCoordinationSystem()
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+
+    for i in range(episodes):
+        ep_date = (start_dt + timedelta(days=i * interval_days)).strftime("%Y-%m-%d")
+        print(f"\n=== EPISODE {i+1} — Date: {ep_date} ===")
+        results = await system.run_coordination_episode(scenario, ep_date)
+        metrics = results["coordination_metrics"]
+        print(f"Risk: {metrics['initial_risk']:.2f} -> {metrics['final_risk']:.2f} (Δ{metrics['risk_reduction']:.2f}) | Success: {'✅' if metrics['coordination_success'] else '❌'}")
+
+        broadcasts = results.get("broadcasts", [])
+        offers = [b for b in broadcasts if b.get("type") == "commitment_offer_accepted"]
+        due_results = [b for b in broadcasts if b.get("type") == "commitment_due_result"]
+        flagged = [b for b in due_results if b.get("flag", {}) and b["flag"].get("flagged")]
+
+        print(f"Offers accepted this episode: {len(offers)}")
+        for ev in offers:
+            print(f"  • Slot {ev.get('time_slot')}: {ev.get('to')} {ev.get('adjustment'):+d}min (from {ev.get('from')}), reciprocal next: {ev.get('reciprocal', {}).get('adjustment_minutes', 0):+d}min")
+
+        print(f"Due commitments processed: {len(due_results)}")
+        for ev in due_results:
+            status = ev.get('status')
+            print(f"  • {ev.get('to')} {ev.get('adjustment'):+d}min — {status}")
+
+        if flagged:
+            print(f"Violations flagged: {len(flagged)}")
+            for ev in flagged:
+                f = ev.get('flag', {})
+                print(f"  ⚠️  {f.get('classroom')} flagged (violations={f.get('violation_count')})")
+
 async def main():
-    """Main test runner"""
     if len(sys.argv) < 2:
         print("Usage: python test_runner.py <test_type>")
         print("Available tests:")
@@ -147,6 +168,7 @@ async def main():
         print("  ablation    - Ablation study comparing configurations")
         print("  sensitivity - Parameter sensitivity analysis")
         print("  scenarios   - Demonstrate all available scenarios")
+        print("  episodes    - Run multi-episode commitment test (4 weeks)")
         print("  all         - Run all tests")
         return
     
@@ -162,6 +184,8 @@ async def main():
         await run_parameter_sensitivity()
     elif test_type == "scenarios":
         await demonstrate_all_scenarios()
+    elif test_type == "episodes":
+        await run_multi_episode_commitments()
     elif test_type == "all":
         await run_quick_test()
         await run_stress_test()
